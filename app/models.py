@@ -129,6 +129,7 @@ class IndependentOpinion(BaseModel):
 
 
 class AuditFinding(BaseModel):
+    subject: str = "primary"
     code: str
     severity: str
     title: str

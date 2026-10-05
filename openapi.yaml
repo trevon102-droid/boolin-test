@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: Boolin Analyst API
-  version: 0.1.0
-  description: Research-first sports analysis API for Boolin.
+  version: 0.2.0
+  description: Research-first sports analysis API for the Boolin normalized data layer.
 servers:
   - url: http://127.0.0.1:8000
 paths:
@@ -10,135 +10,119 @@ paths:
     get:
       summary: Health check
       responses:
-        "200":
-          description: Service health
+        "200": {description: Service health}
   /games:
     get:
       summary: List research games
       parameters:
-        - in: query
-          name: league
-          schema: {type: string}
+        - {in: query, name: league, schema: {type: string}}
       responses:
-        "200":
-          description: Research games
+        "200": {description: Research games}
   /games/{game_id}:
     get:
-      summary: Get a game
+      summary: Get one research game
       parameters:
-        - in: path
-          name: game_id
-          required: true
-          schema: {type: string}
+        - {in: path, name: game_id, required: true, schema: {type: string}}
       responses:
-        "200":
-          description: Research game
-        "404":
-          description: Game not found
+        "200": {description: Research game}
+        "404": {description: Game not found}
   /games/{game_id}/research:
     get:
-      summary: Get the full research card
+      summary: Get the complete research card
       parameters:
-        - in: path
-          name: game_id
-          required: true
-          schema: {type: string}
+        - {in: path, name: game_id, required: true, schema: {type: string}}
       responses:
-        "200":
-          description: Research card
+        "200": {description: Research card with model comparison, flags, market summary, scenarios, and freshness}
   /games/{game_id}/market-history:
     get:
-      summary: Get market history
+      summary: Get raw stored market snapshots
       parameters:
-        - in: path
-          name: game_id
-          required: true
-          schema: {type: string}
+        - {in: path, name: game_id, required: true, schema: {type: string}}
       responses:
-        "200":
-          description: Historical market snapshots
+        "200": {description: Market snapshots ordered by time}
+  /games/{game_id}/market-summary:
+    get:
+      summary: Get opening/current/closing market summary
+      parameters:
+        - {in: path, name: game_id, required: true, schema: {type: string}}
+      responses:
+        "200": {description: Market summaries grouped by bookmaker and market}
   /games/{game_id}/changes:
     get:
-      summary: Get detected changes
+      summary: Detect market changes between stored snapshots
       parameters:
-        - in: path
-          name: game_id
-          required: true
-          schema: {type: string}
+        - {in: path, name: game_id, required: true, schema: {type: string}}
       responses:
-        "200":
-          description: Change timeline
+        "200": {description: Change timeline}
   /games/{game_id}/compare:
     get:
       summary: Compare market and Boolin model
       parameters:
-        - in: path
-          name: game_id
-          required: true
-          schema: {type: string}
+        - {in: path, name: game_id, required: true, schema: {type: string}}
       responses:
-        "200":
-          description: Comparison
+        "200": {description: Market/model comparison}
+  /games/{game_id}/freshness:
+    get:
+      summary: Get source freshness and provenance
+      parameters:
+        - {in: path, name: game_id, required: true, schema: {type: string}}
+      responses:
+        "200": {description: Source freshness records}
+  /games/{game_id}/flags:
+    get:
+      summary: Get dynamically computed research flags
+      parameters:
+        - {in: path, name: game_id, required: true, schema: {type: string}}
+      responses:
+        "200": {description: Research flags}
+  /games/{game_id}/scenarios:
+    get:
+      summary: Get stored scenario analysis
+      parameters:
+        - {in: path, name: game_id, required: true, schema: {type: string}}
+      responses:
+        "200": {description: Scenario analysis}
   /games/{game_id}/notes:
     get:
       summary: List analyst notes
       parameters:
-        - in: path
-          name: game_id
-          required: true
-          schema: {type: string}
+        - {in: path, name: game_id, required: true, schema: {type: string}}
       responses:
-        "200":
-          description: Analyst notes
+        "200": {description: Analyst notes}
     post:
       summary: Create analyst note
       parameters:
-        - in: path
-          name: game_id
-          required: true
-          schema: {type: string}
+        - {in: path, name: game_id, required: true, schema: {type: string}}
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              $ref: "#/components/schemas/AnalystNoteCreate"
+            schema: {$ref: "#/components/schemas/AnalystNoteCreate"}
       responses:
-        "201":
-          description: Created note
+        "201": {description: Created note}
   /games/{game_id}/reviews:
     get:
       summary: List postgame reviews
       parameters:
-        - in: path
-          name: game_id
-          required: true
-          schema: {type: string}
+        - {in: path, name: game_id, required: true, schema: {type: string}}
       responses:
-        "200":
-          description: Reviews
+        "200": {description: Postgame reviews}
     post:
       summary: Create postgame review
       parameters:
-        - in: path
-          name: game_id
-          required: true
-          schema: {type: string}
+        - {in: path, name: game_id, required: true, schema: {type: string}}
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              $ref: "#/components/schemas/PostgameReviewCreate"
+            schema: {$ref: "#/components/schemas/PostgameReviewCreate"}
       responses:
-        "201":
-          description: Created review
+        "201": {description: Created review}
   /research-board:
     get:
-      summary: Get the daily research board
+      summary: Get the prioritized daily research board
       responses:
-        "200":
-          description: Prioritized research list
+        "200": {description: Research board}
 components:
   schemas:
     AnalystNoteCreate:
@@ -146,20 +130,11 @@ components:
       required: [thesis]
       properties:
         thesis: {type: string}
-        supporting_evidence:
-          type: array
-          items: {type: string}
-        contradicting_evidence:
-          type: array
-          items: {type: string}
-        unknowns:
-          type: array
-          items: {type: string}
-        decision:
-          type: string
-          enum: [lean, pass, watch, insufficient]
-        entry_trigger:
-          type: [string, "null"]
+        supporting_evidence: {type: array, items: {type: string}}
+        contradicting_evidence: {type: array, items: {type: string}}
+        unknowns: {type: array, items: {type: string}}
+        decision: {type: string, enum: [lean, pass, watch, insufficient]}
+        entry_trigger: {type: [string, "null"]}
     PostgameReviewCreate:
       type: object
       required: [thesis_grade, actual_result]
@@ -169,14 +144,8 @@ components:
         injury_grade: {type: [string, "null"]}
         matchup_grade: {type: [string, "null"]}
         weather_grade: {type: [string, "null"]}
-        what_was_right:
-          type: array
-          items: {type: string}
-        what_was_wrong:
-          type: array
-          items: {type: string}
+        what_was_right: {type: array, items: {type: string}}
+        what_was_wrong: {type: array, items: {type: string}}
         closing_line: {type: [string, "null"]}
         actual_result: {type: string}
-        lessons:
-          type: array
-          items: {type: string}
+        lessons: {type: array, items: {type: string}}

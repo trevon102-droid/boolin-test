@@ -8,14 +8,21 @@ from .models import (
     DataStatus,
     ResearchFlag,
     ResearchGame,
-    ResearchDecision,
-    ResearchSource,
 )
 
 
 def age_seconds(fetched_at: datetime, now: datetime | None = None) -> int:
     now = now or datetime.now(timezone.utc)
     return max(0, int((now - fetched_at).total_seconds()))
+
+
+def _health_status_label(status: DataStatus) -> str:
+    return {
+        DataStatus.OK: "healthy",
+        DataStatus.PARTIAL: "partial",
+        DataStatus.ERROR: "failed",
+        DataStatus.SKIPPED: "skipped",
+    }[status]
 
 
 def build_flags(game: ResearchGame) -> list[ResearchFlag]:
@@ -27,7 +34,18 @@ def build_flags(game: ResearchGame) -> list[ResearchFlag]:
                 code="PARTIAL_DATA",
                 severity="high",
                 title="Partial or failed data source",
-                explanation="At least one research source is not fully healthy. Treat the game as incomplete until the affected fields are resolved.",
+                explanation="At least one research source is not fully healthy. Treat affected fields as incomplete until resolved.",
+                source_fields=["sources"],
+            )
+        )
+
+    if any(s.status == DataStatus.SKIPPED for s in game.sources):
+        flags.append(
+            ResearchFlag(
+                code="SKIPPED_SOURCE",
+                severity="medium",
+                title="Source unavailable or intentionally skipped",
+                explanation="At least one expected research source was skipped. Do not interpret missing fields as negative evidence.",
                 source_fields=["sources"],
             )
         )
@@ -77,6 +95,70 @@ def market_current(game: ResearchGame, market: str, bookmaker: str | None = None
     return max(candidates, key=lambda x: x.timestamp)
 
 
+def market_summary(game: ResearchGame, now: datetime | None = None) -> list[dict[str, Any]]:
+    now = now or datetime.now(timezone.utc)
+    groups: dict[tuple[str, str, str | None], list[Any]] = {}
+
+    for snapshot in game.market:
+        key = (snapshot.bookmaker, snapshot.market, snapshot.side)
+        groups.setdefault(key, []).append(snapshot)
+
+    result: list[dict[str, Any]] = []
+    for (bookmaker, market, side), snapshots in groups.items():
+        ordered = sorted(snapshots, key=lambda x: x.timestamp)
+        opening = ordered[0]
+        current = ordered[-1]
+        close_candidates = [m for m in ordered if m.timestamp <= game.start_time]
+        closing = close_candidates[-1] if game.start_time <= now and close_candidates else None
+
+        result.append(
+            {
+                "bookmaker": bookmaker,
+                "market": market,
+                "side": side,
+                "opening": opening.model_dump(mode="json"),
+                "current": current.model_dump(mode="json"),
+                "closing": closing.model_dump(mode="json") if closing else None,
+                "snapshot_count": len(ordered),
+                "line_move": (
+                    round(current.line - opening.line, 2)
+                    if current.line is not None and opening.line is not None
+                    else None
+                ),
+                "price_move": (
+                    current.price - opening.price
+                    if current.price is not None and opening.price is not None
+                    else None
+                ),
+            }
+        )
+
+    return sorted(result, key=lambda x: (x["market"], x["bookmaker"], x["side"] or ""))
+
+
+def freshness(game: ResearchGame, now: datetime | None = None) -> list[dict[str, Any]]:
+    now = now or datetime.now(timezone.utc)
+    result = []
+
+    for source in game.sources:
+        age = age_seconds(source.fetched_at, now)
+        result.append(
+            {
+                "source": source.name,
+                "status": source.status.value,
+                "health": _health_status_label(source.status),
+                "source_type": source.source_type.value,
+                "fetched_at": source.fetched_at,
+                "age_seconds": age,
+                "age_minutes": round(age / 60, 1),
+                "fields": source.fields,
+                "error": source.error,
+            }
+        )
+
+    return sorted(result, key=lambda x: x["age_seconds"], reverse=True)
+
+
 def compare_market_model(game: ResearchGame) -> dict[str, Any]:
     result: dict[str, Any] = {}
 
@@ -118,8 +200,8 @@ def detect_changes(previous: ResearchGame, current: ResearchGame) -> list[Change
                 timestamp=current.start_time,
                 category="model",
                 field="model",
-                old_value=previous.model.model_dump(),
-                new_value=current.model.model_dump(),
+                old_value=previous.model.model_dump(mode="json"),
+                new_value=current.model.model_dump(mode="json"),
                 source="research_engine",
                 explanation="Model output changed between snapshots; stored data does not establish a single causal reason.",
             )
@@ -158,21 +240,43 @@ def detect_changes(previous: ResearchGame, current: ResearchGame) -> list[Change
     return sorted(changes, key=lambda x: x.timestamp)
 
 
+def detect_internal_market_changes(game: ResearchGame) -> list[ChangeEvent]:
+    changes: list[ChangeEvent] = []
+    grouped: dict[tuple[str, str, str | None], list[Any]] = {}
+
+    for snapshot in game.market:
+        grouped.setdefault((snapshot.bookmaker, snapshot.market, snapshot.side), []).append(snapshot)
+
+    for (bookmaker, market, side), snapshots in grouped.items():
+        ordered = sorted(snapshots, key=lambda x: x.timestamp)
+        for old, new in zip(ordered, ordered[1:]):
+            if old.line == new.line and old.price == new.price:
+                continue
+            changes.append(
+                ChangeEvent(
+                    timestamp=new.timestamp,
+                    category="market",
+                    field=f"{bookmaker}.{market}.{side or ''}",
+                    old_value={"line": old.line, "price": old.price},
+                    new_value={"line": new.line, "price": new.price},
+                    source=bookmaker,
+                    explanation="Market value changed between stored snapshots; causality is not confirmed.",
+                )
+            )
+
+    return sorted(changes, key=lambda x: x.timestamp)
+
+
 def research_score(game: ResearchGame) -> int:
     score = 0
-    reasons = 0
-
-    if game.flags:
-        score += min(40, len(game.flags) * 10)
-        reasons += len(game.flags)
+    flags = build_flags(game)
+    score += min(40, len(flags) * 10)
 
     comparison = compare_market_model(game)
     if abs(comparison.get("probability_delta", 0)) >= 0.05:
         score += 25
-        reasons += 1
     if abs(comparison.get("spread_delta", 0)) >= 1.5:
         score += 20
-        reasons += 1
     if game.unknowns:
         score += min(15, len(game.unknowns) * 5)
 

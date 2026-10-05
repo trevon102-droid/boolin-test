@@ -97,6 +97,37 @@ def build_dual_audit(game: ResearchGame) -> DualAudit:
         )
         questions.append("Which unknown would most change the thesis?")
 
+    moneyline_book_count = len([
+        m for m in game.market
+        if m.market == "moneyline" and m.implied_probability is not None
+    ])
+
+    findings.append(
+        AuditFinding(
+            subject="independent",
+            code="INDEPENDENT_MARKET_ONLY",
+            severity="medium",
+            title="Independent layer is a market-first control model",
+            explanation="The second layer intentionally does not reuse the primary model or hidden team-level assumptions. Its strongest use is auditing confidence and market divergence, not producing a full team-performance forecast.",
+            evidence=[
+                "Independent probability is derived from the latest available moneyline observations.",
+                "No primary model fields are used to build the independent probability.",
+            ],
+        )
+    )
+
+    if moneyline_book_count < 2:
+        findings.append(
+            AuditFinding(
+                subject="independent",
+                code="INDEPENDENT_LOW_MARKET_COVERAGE",
+                severity="medium",
+                title="Independent layer has thin market coverage",
+                explanation="The control model has fewer than two usable bookmaker moneyline observations.",
+                evidence=[f"Usable moneyline observations: {moneyline_book_count}."],
+            )
+        )
+
     if independent.warnings and independent.confidence < 0.60:
         findings.append(
             AuditFinding(

@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from .audit import build_dual_audit
 from .engine import (
     build_flags,
     compare_market_model,
@@ -101,6 +102,31 @@ def get_freshness(game_id: str) -> list[dict]:
 @app.get("/games/{game_id}/flags")
 def get_flags(game_id: str) -> list[dict]:
     return [flag.model_dump(mode="json") for flag in build_flags(get_game(game_id))]
+
+@app.get("/games/{game_id}/second-opinion")
+def get_second_opinion(game_id: str):
+    from .independent import build_independent_opinion
+    return build_independent_opinion(get_game(game_id))
+
+@app.get("/games/{game_id}/dual-audit")
+def get_dual_audit(game_id: str):
+    return build_dual_audit(get_game(game_id))
+
+@app.get("/audit-board")
+def audit_board() -> list[dict]:
+    results = []
+    for game in store.load_games():
+        audit = build_dual_audit(game)
+        results.append({
+            "game_id": game.game_id,
+            "matchup": f"{game.away_team} @ {game.home_team}",
+            "verdict": audit.verdict,
+            "agreement_score": audit.agreement_score,
+            "finding_count": len(audit.findings),
+            "high_severity": sum(1 for f in audit.findings if f.severity == "high"),
+            "start_time": game.start_time,
+        })
+    return sorted(results, key=lambda x: (-x["high_severity"], -x["finding_count"], x["start_time"]))
 
 @app.get("/games/{game_id}/scenarios")
 def get_scenarios(game_id: str) -> list[dict]:

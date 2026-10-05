@@ -60,3 +60,23 @@ The intended production path is:
 `boolin` data pipeline → normalized JSON snapshots → Boolin Analyst API → dashboard / other clients.
 
 Do not couple the research layer directly to bookmaker scraping or model-specific assumptions that belong in the upstream data layer.
+
+
+## Dashboard launch URL
+
+Run the API from the repository root:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python -m uvicorn app.main:app --reload
+```
+
+Then open:
+
+**http://127.0.0.1:8000/**
+
+Swagger: **http://127.0.0.1:8000/docs**
+
+On Windows PowerShell, use `.\\.venv\\Scripts\\python.exe -m uvicorn app.main:app --reload`.

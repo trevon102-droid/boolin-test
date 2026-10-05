@@ -1,0 +1,97 @@
+[
+  {
+    "game_id": "NFL-2026-BUF-KC",
+    "league": "NFL",
+    "start_time": "2026-10-11T20:20:00Z",
+    "home_team": "KC",
+    "away_team": "BUF",
+    "venue": "GEHA Field at Arrowhead Stadium",
+    "market": [
+      {"timestamp":"2026-10-05T13:30:00Z","bookmaker":"pinnacle","market":"spread","side":"BUF","line":3.5,"price":-110},
+      {"timestamp":"2026-10-05T15:30:00Z","bookmaker":"pinnacle","market":"spread","side":"BUF","line":3.0,"price":-108},
+      {"timestamp":"2026-10-05T13:30:00Z","bookmaker":"fanduel","market":"moneyline","side":"BUF","line":null,"price":145,"implied_probability":0.4082},
+      {"timestamp":"2026-10-05T15:30:00Z","bookmaker":"fanduel","market":"moneyline","side":"BUF","line":null,"price":135,"implied_probability":0.4255},
+      {"timestamp":"2026-10-05T13:30:00Z","bookmaker":"pinnacle","market":"moneyline","side":"BUF","line":null,"price":139,"implied_probability":0.4184},
+      {"timestamp":"2026-10-05T15:30:00Z","bookmaker":"pinnacle","market":"moneyline","side":"BUF","line":null,"price":129,"implied_probability":0.4367},
+      {"timestamp":"2026-10-05T13:30:00Z","bookmaker":"pinnacle","market":"total","side":"over","line":47.5,"price":-110},
+      {"timestamp":"2026-10-05T15:30:00Z","bookmaker":"pinnacle","market":"total","side":"over","line":46.0,"price":-110}
+    ],
+    "model": {
+      "win_probability": 0.455,
+      "projected_spread": 1.7,
+      "projected_total": 44.8,
+      "confidence": 0.71,
+      "sample_size": 6
+    },
+    "availability": [
+      {
+        "name":"BUF WR1",
+        "status":"Questionable",
+        "evidence_kind":"projected",
+        "source":"ESPN",
+        "updated_at":"2026-10-05T15:10:00Z"
+      }
+    ],
+    "sources": [
+      {
+        "name":"odds",
+        "source_type":"confirmed",
+        "fetched_at":"2026-10-05T15:30:00Z",
+        "status":"ok",
+        "age_seconds":0,
+        "fields":["spread","moneyline","total"]
+      },
+      {
+        "name":"injuries",
+        "source_type":"projected",
+        "fetched_at":"2026-10-05T15:10:00Z",
+        "status":"ok",
+        "age_seconds":1200,
+        "fields":["availability"]
+      },
+      {
+        "name":"model",
+        "source_type":"derived",
+        "fetched_at":"2026-10-05T15:25:00Z",
+        "status":"ok",
+        "age_seconds":300,
+        "fields":["win_probability","projected_spread","projected_total"]
+      }
+    ],
+    "flags": [],
+    "scenarios": [
+      {
+        "name":"WR1 active",
+        "assumption":"WR1 is confirmed active",
+        "projected_probability":0.47,
+        "projected_spread":1.1,
+        "projected_total":45.4,
+        "delta_probability":0.015,
+        "delta_spread":-0.6,
+        "delta_total":0.6
+      },
+      {
+        "name":"WR1 inactive",
+        "assumption":"WR1 is confirmed out",
+        "projected_probability":0.43,
+        "projected_spread":2.6,
+        "projected_total":44.1,
+        "delta_probability":-0.025,
+        "delta_spread":0.9,
+        "delta_total":-0.7
+      }
+    ],
+    "summary_supporting": [
+      "Boolin projects a lower total than the current market.",
+      "Buffalo remains competitive in the model even with the current availability uncertainty."
+    ],
+    "summary_contradicting": [
+      "The market has moved toward Buffalo at the moneyline while the model remains more conservative."
+    ],
+    "unknowns": [
+      "WR1 final availability",
+      "Whether the market move is injury-driven or broader"
+    ],
+    "decision": "watch"
+  }
+]

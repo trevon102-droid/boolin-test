@@ -1,0 +1,182 @@
+openapi: 3.1.0
+info:
+  title: Boolin Analyst API
+  version: 0.1.0
+  description: Research-first sports analysis API for Boolin.
+servers:
+  - url: http://127.0.0.1:8000
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: Service health
+  /games:
+    get:
+      summary: List research games
+      parameters:
+        - in: query
+          name: league
+          schema: {type: string}
+      responses:
+        "200":
+          description: Research games
+  /games/{game_id}:
+    get:
+      summary: Get a game
+      parameters:
+        - in: path
+          name: game_id
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Research game
+        "404":
+          description: Game not found
+  /games/{game_id}/research:
+    get:
+      summary: Get the full research card
+      parameters:
+        - in: path
+          name: game_id
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Research card
+  /games/{game_id}/market-history:
+    get:
+      summary: Get market history
+      parameters:
+        - in: path
+          name: game_id
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Historical market snapshots
+  /games/{game_id}/changes:
+    get:
+      summary: Get detected changes
+      parameters:
+        - in: path
+          name: game_id
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Change timeline
+  /games/{game_id}/compare:
+    get:
+      summary: Compare market and Boolin model
+      parameters:
+        - in: path
+          name: game_id
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Comparison
+  /games/{game_id}/notes:
+    get:
+      summary: List analyst notes
+      parameters:
+        - in: path
+          name: game_id
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Analyst notes
+    post:
+      summary: Create analyst note
+      parameters:
+        - in: path
+          name: game_id
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalystNoteCreate"
+      responses:
+        "201":
+          description: Created note
+  /games/{game_id}/reviews:
+    get:
+      summary: List postgame reviews
+      parameters:
+        - in: path
+          name: game_id
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Reviews
+    post:
+      summary: Create postgame review
+      parameters:
+        - in: path
+          name: game_id
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PostgameReviewCreate"
+      responses:
+        "201":
+          description: Created review
+  /research-board:
+    get:
+      summary: Get the daily research board
+      responses:
+        "200":
+          description: Prioritized research list
+components:
+  schemas:
+    AnalystNoteCreate:
+      type: object
+      required: [thesis]
+      properties:
+        thesis: {type: string}
+        supporting_evidence:
+          type: array
+          items: {type: string}
+        contradicting_evidence:
+          type: array
+          items: {type: string}
+        unknowns:
+          type: array
+          items: {type: string}
+        decision:
+          type: string
+          enum: [lean, pass, watch, insufficient]
+        entry_trigger:
+          type: [string, "null"]
+    PostgameReviewCreate:
+      type: object
+      required: [thesis_grade, actual_result]
+      properties:
+        thesis_grade: {type: string}
+        market_read_grade: {type: [string, "null"]}
+        injury_grade: {type: [string, "null"]}
+        matchup_grade: {type: [string, "null"]}
+        weather_grade: {type: [string, "null"]}
+        what_was_right:
+          type: array
+          items: {type: string}
+        what_was_wrong:
+          type: array
+          items: {type: string}
+        closing_line: {type: [string, "null"]}
+        actual_result: {type: string}
+        lessons:
+          type: array
+          items: {type: string}

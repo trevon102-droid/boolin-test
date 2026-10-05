@@ -96,3 +96,25 @@ def test_research_score_increases_for_disagreement():
     current = game(line=3.5, probability=0.55)
     score = research_score(current)
     assert score > 0
+
+
+def test_independent_layer_does_not_require_model_output():
+    from app.independent import build_independent_opinion
+
+    current = game()
+    current.model.win_probability = None
+    opinion = build_independent_opinion(current)
+    assert opinion.engine == "independent-v1"
+    assert opinion.market_probability is not None
+    assert opinion.confidence < 0.9
+
+
+def test_dual_audit_catches_small_sample_high_confidence():
+    from app.audit import build_dual_audit
+
+    current = game(probability=0.60)
+    current.model.sample_size = 3
+    current.model.confidence = 0.80
+    audit = build_dual_audit(current)
+    codes = {finding.code for finding in audit.findings}
+    assert "OVERCONFIDENT_SMALL_SAMPLE" in codes

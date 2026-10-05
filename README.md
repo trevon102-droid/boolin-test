@@ -16,6 +16,8 @@ This project turns normalized sports data into an analyst workflow:
 - Analyst notes
 - Postgame review/grading
 - Daily research board
+- Independent second-opinion control layer
+- Mutual audit of the primary and independent layers
 
 It is intentionally separate from the production `boolin` repository so the research experience can evolve without destabilizing ingestion.
 
@@ -45,7 +47,7 @@ Set `ANALYST_DB_PATH` to choose where analyst notes and postgame reviews are sto
 
 ## Research principles
 
-The API keeps confirmed, projected, and derived information separate. It computes research flags dynamically so stale demo metadata cannot hide unresolved conditions.
+The API keeps confirmed, projected, and derived information separate. The independent layer does not call the primary research engine; it acts as a market-first control model designed to expose overconfidence and data-quality problems. It computes research flags dynamically so stale demo metadata cannot hide unresolved conditions.
 
 A change detected in market history is not treated as causally explained unless the source data actually establishes the cause.
 

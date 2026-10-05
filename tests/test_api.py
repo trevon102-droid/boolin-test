@@ -90,3 +90,23 @@ def test_dashboard_and_openapi():
         "/games/{game_id}/scenarios",
     ):
         assert path in spec["paths"]
+
+
+def test_independent_second_opinion_and_dual_audit():
+    opinion = client.get("/games/NFL-2026-BUF-KC/second-opinion")
+    assert opinion.status_code == 200
+    payload = opinion.json()
+    assert payload["engine"] == "independent-v1"
+    assert payload["methodology"].startswith("Market-consensus")
+
+    audit = client.get("/games/NFL-2026-BUF-KC/dual-audit")
+    assert audit.status_code == 200
+    audit_payload = audit.json()
+    assert audit_payload["game_id"] == "NFL-2026-BUF-KC"
+    assert "independent" in audit_payload
+    assert "findings" in audit_payload
+    assert 0 <= audit_payload["agreement_score"] <= 1
+
+    board = client.get("/audit-board")
+    assert board.status_code == 200
+    assert board.json()[0]["game_id"] == "NFL-2026-BUF-KC"

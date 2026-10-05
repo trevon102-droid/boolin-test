@@ -113,6 +113,39 @@ class ResearchGame(BaseModel):
     decision: ResearchDecision = ResearchDecision.INSUFFICIENT
 
 
+class IndependentOpinion(BaseModel):
+    engine: str = "independent-v1"
+    methodology: str = "Market-consensus baseline with explicit uncertainty penalties; does not reuse Boolin Analyst engine outputs."
+    market_probability: float | None = Field(default=None, ge=0, le=1)
+    market_spread: float | None = None
+    market_total: float | None = None
+    movement_signal: str = "unknown"
+    availability_signal: str = "unknown"
+    data_quality: str = "unknown"
+    confidence: float = Field(ge=0, le=1)
+    decision: ResearchDecision = ResearchDecision.INSUFFICIENT
+    reasons: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class AuditFinding(BaseModel):
+    code: str
+    severity: str
+    title: str
+    explanation: str
+    evidence: list[str] = Field(default_factory=list)
+
+
+class DualAudit(BaseModel):
+    game_id: str
+    verdict: str
+    agreement_score: float = Field(ge=0, le=1)
+    analyst: dict[str, Any]
+    independent: IndependentOpinion
+    findings: list[AuditFinding] = Field(default_factory=list)
+    questions_for_review: list[str] = Field(default_factory=list)
+
+
 class AnalystNoteCreate(BaseModel):
     thesis: str
     supporting_evidence: list[str] = Field(default_factory=list)

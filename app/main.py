@@ -2,15 +2,33 @@ from __future__ import annotations
 
 from fastapi import FastAPI, HTTPException, Query
 
-from .engine import compare_market_model, detect_changes, research_score
-from .models import AnalystNote, AnalystNoteCreate, PostgameReview, PostgameReviewCreate, ResearchBoardItem, ResearchGame
+from .engine import (
+    build_flags,
+    compare_market_model,
+    detect_changes,
+    detect_internal_market_changes,
+    freshness,
+    market_summary,
+    research_score,
+)
+from .models import (
+    AnalystNote,
+    AnalystNoteCreate,
+    PostgameReview,
+    PostgameReviewCreate,
+    ResearchBoardItem,
+    ResearchGame,
+)
 from .store import AnalystStore
 
 
 app = FastAPI(
     title="Boolin Analyst API",
-    version="0.1.0",
-    description="Research-first sports analysis API for Boolin.",
+    version="0.2.0",
+    description=(
+        "Research-first sports analysis API. "
+        "Designed to sit on top of the Boolin normalized data layer."
+    ),
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -21,7 +39,7 @@ store = AnalystStore()
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "service": "boolin-analyst", "version": app.version}
 
 
 @app.get("/games", response_model=list[ResearchGame])
@@ -43,16 +61,17 @@ def get_game(game_id: str) -> ResearchGame:
 @app.get("/games/{game_id}/research")
 def get_research(game_id: str) -> dict:
     game = get_game(game_id)
-    comparison = compare_market_model(game)
     return {
         "game": game,
-        "market_vs_model": comparison,
+        "market_vs_model": compare_market_model(game),
+        "market_summary": market_summary(game),
         "supporting_evidence": game.summary_supporting,
         "contradicting_evidence": game.summary_contradicting,
         "unknowns": game.unknowns,
-        "flags": game.flags,
+        "flags": build_flags(game),
         "scenarios": game.scenarios,
         "decision": game.decision,
+        "freshness": freshness(game),
     }
 
 
@@ -62,27 +81,37 @@ def get_market_history(game_id: str) -> list[dict]:
     return [m.model_dump(mode="json") for m in sorted(game.market, key=lambda x: x.timestamp)]
 
 
+@app.get("/games/{game_id}/market-summary")
+def get_market_summary(game_id: str) -> list[dict]:
+    return market_summary(get_game(game_id))
+
+
 @app.get("/games/{game_id}/changes")
 def get_changes(game_id: str) -> list[dict]:
-    games = store.load_games()
-    current = next((g for g in games if g.game_id == game_id), None)
-    if not current:
-        raise HTTPException(status_code=404, detail="Game not found")
-
-    previous = next(
-        (g for g in games if g.game_id == f"{game_id}:previous"),
-        None,
-    )
-    if not previous:
-        return []
-
-    return [c.model_dump(mode="json") for c in detect_changes(previous, current)]
+    game = get_game(game_id)
+    changes = detect_internal_market_changes(game)
+    return [c.model_dump(mode="json") for c in changes]
 
 
 @app.get("/games/{game_id}/compare")
 def get_compare(game_id: str) -> dict:
+    return compare_market_model(get_game(game_id))
+
+
+@app.get("/games/{game_id}/freshness")
+def get_freshness(game_id: str) -> list[dict]:
+    return freshness(get_game(game_id))
+
+
+@app.get("/games/{game_id}/flags")
+def get_flags(game_id: str) -> list[dict]:
+    return [flag.model_dump(mode="json") for flag in build_flags(get_game(game_id))]
+
+
+@app.get("/games/{game_id}/scenarios")
+def get_scenarios(game_id: str) -> list[dict]:
     game = get_game(game_id)
-    return compare_market_model(game)
+    return [scenario.model_dump(mode="json") for scenario in game.scenarios]
 
 
 @app.get("/games/{game_id}/notes", response_model=list[AnalystNote])
@@ -111,14 +140,13 @@ def create_review(game_id: str, review: PostgameReviewCreate) -> PostgameReview:
 
 @app.get("/research-board", response_model=list[ResearchBoardItem])
 def research_board() -> list[ResearchBoardItem]:
-    games = store.load_games()
     board: list[ResearchBoardItem] = []
 
-    for game in games:
+    for game in store.load_games():
+        flags = build_flags(game)
         score = research_score(game)
-        reasons: list[str] = []
-        if game.flags:
-            reasons.extend(flag.title for flag in game.flags)
+        reasons = [flag.title for flag in flags]
+
         comparison = compare_market_model(game)
         if abs(comparison.get("probability_delta", 0)) >= 0.05:
             reasons.append("Model/market probability disagreement")
@@ -133,7 +161,7 @@ def research_board() -> list[ResearchBoardItem]:
                 matchup=f"{game.away_team} @ {game.home_team}",
                 research_score=score,
                 reasons=reasons[:6],
-                flags=[flag.code for flag in game.flags],
+                flags=[flag.code for flag in flags],
                 start_time=game.start_time,
             )
         )
@@ -143,4 +171,9 @@ def research_board() -> list[ResearchBoardItem]:
 
 @app.get("/")
 def root() -> dict[str, str]:
-    return {"service": "Boolin Analyst", "docs": "/docs", "openapi": "/openapi.json"}
+    return {
+        "service": "Boolin Analyst",
+        "version": app.version,
+        "docs": "/docs",
+        "openapi": "/openapi.json",
+    }

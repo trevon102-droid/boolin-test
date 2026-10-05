@@ -75,6 +75,26 @@ paths:
         - {in: path, name: game_id, required: true, schema: {type: string}}
       responses:
         "200": {description: Research flags}
+
+  /games/{game_id}/second-opinion:
+    get:
+      summary: Get the independent research layer
+      parameters:
+        - {in: path, name: game_id, required: true, schema: {type: string}}
+      responses:
+        "200": {description: Independent market-consensus research opinion}
+  /games/{game_id}/dual-audit:
+    get:
+      summary: Compare the primary analyst layer against the independent layer
+      parameters:
+        - {in: path, name: game_id, required: true, schema: {type: string}}
+      responses:
+        "200": {description: Peer audit with agreement score, findings, and review questions}
+  /audit-board:
+    get:
+      summary: Get the slate-wide audit board
+      responses:
+        "200": {description: Audit prioritization}
   /games/{game_id}/scenarios:
     get:
       summary: Get stored scenario analysis

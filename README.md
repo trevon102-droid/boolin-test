@@ -1,43 +1,23 @@
 # Boolin Analyst
 
-A research-first sports analysis API built on top of the Boolin data layer.
+A research-first sports analysis API and dashboard built as a separate layer above the Boolin data pipeline.
 
-## What this repo does
+## Purpose
 
-Boolin Analyst turns normalized sports data into an analyst workflow:
+This project turns normalized sports data into an analyst workflow:
 
 - Game Research Cards
-- Market open/current/close tracking
-- Model vs market comparison
-- Change timelines
+- Opening/current/closing market tracking
+- Market vs model comparison
+- Market change timelines
 - Research flags
-- Data freshness/provenance
+- Data freshness and provenance
 - Scenario analysis
 - Analyst notes
 - Postgame review/grading
 - Daily research board
 
-This project is intentionally separate from the production `boolin` data pipeline.
-
-## Architecture
-
-```
-Boolin data / normalized snapshots
-              |
-              v
-        Analyst Store
-              |
-              v
-       Research Engine
-              |
-              v
-          FastAPI
-              |
-              +--> OpenAPI / Swagger
-              +--> research board
-              +--> game research cards
-              +--> analyst notebook
-```
+It is intentionally separate from the production `boolin` repository so the research experience can evolve without destabilizing ingestion.
 
 ## Run locally
 
@@ -50,31 +30,31 @@ uvicorn app.main:app --reload
 
 Open:
 
-- http://127.0.0.1:8000/docs
-- http://127.0.0.1:8000/openapi.json
+- Dashboard: http://127.0.0.1:8000/
+- Swagger UI: http://127.0.0.1:8000/docs
+- ReDoc: http://127.0.0.1:8000/redoc
+- OpenAPI JSON: http://127.0.0.1:8000/openapi.json
 
-Run tests:
-
-```bash
-pytest -q
-```
+The checked-in contract is `openapi.yaml`.
 
 ## Data contract
 
-The service consumes generic normalized game snapshots. The production Boolin repository can later feed this layer through an adapter instead of duplicating sports-source logic.
+Set `BOOLIN_GAMES_PATH` to point the analyst service at a normalized Boolin games JSON file. If unset, the demo data at `data/latest/games.json` is used.
 
-Environment:
+Set `ANALYST_DB_PATH` to choose where analyst notes and postgame reviews are stored. SQLite is used by default.
 
-```
-ANALYST_DB_PATH=data/analyst.db
-BOOLIN_SNAPSHOT_DIR=data/snapshots
-```
+## Research principles
 
-## Design principles
+The API keeps confirmed, projected, and derived information separate. It computes research flags dynamically so stale demo metadata cannot hide unresolved conditions.
 
-1. Never silently treat partial data as complete.
-2. Keep confirmed, projected, and derived values separate.
-3. Never invent causality for a detected market/model change.
-4. Historical market snapshots are append-only from the analyst layer's perspective.
-5. Research flags explain why they fired.
-6. A lean/pass/watch conclusion is allowed; the system does not force a bet.
+A change detected in market history is not treated as causally explained unless the source data actually establishes the cause.
+
+Missing data is represented as missing/unknown rather than silently filled.
+
+## Next integration step
+
+The intended production path is:
+
+`boolin` data pipeline → normalized JSON snapshots → Boolin Analyst API → dashboard / other clients.
+
+Do not couple the research layer directly to bookmaker scraping or model-specific assumptions that belong in the upstream data layer.

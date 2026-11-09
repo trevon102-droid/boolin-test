@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from . import matching
 from .independent import build_independent_opinion
 from .models import AuditFinding, DataStatus, DualAudit, ResearchDecision, ResearchGame
 
@@ -19,11 +20,44 @@ def build_dual_audit(game: ResearchGame) -> DualAudit:
     questions: list[str] = []
 
     analyst_probability = game.model.win_probability
+    # Only compare like with like: the analyst probability is FROM game.model.perspective, the independent market
+    # probability is FOR independent.market_probability_side. If they are not the same team, there is no gap.
+    perspective_team = matching.resolve_team(game, game.model.perspective)
+    same_side = perspective_team is not None and matching.norm(perspective_team) == matching.norm(independent.market_probability_side)
     probability_gap = (
         abs(analyst_probability - independent.market_probability)
-        if analyst_probability is not None and independent.market_probability is not None
+        if analyst_probability is not None and independent.market_probability is not None and same_side
         else None
     )
+
+    if analyst_probability is not None and not same_side:
+        findings.append(
+            AuditFinding(
+                subject="independent",
+                code="MARKET_COMPARISON_INVALID",
+                severity="high",
+                title="Model probability cannot be compared with the market (side not established)",
+                explanation="The analyst win probability has no valid perspective team, so it cannot be matched to a market side. No model-vs-market gap was computed.",
+                evidence=[
+                    f"model.perspective = {game.model.perspective!r}; valid values are {game.home_team}, {game.away_team}, 'home', 'away'.",
+                    f"Independent market probability is for {independent.market_probability_side}.",
+                ],
+            )
+        )
+        questions.append("Which team does the analyst win probability describe?")
+
+    ambiguous = matching.ambiguous_snapshots(game)
+    if ambiguous:
+        findings.append(
+            AuditFinding(
+                subject="independent",
+                code="MARKET_AMBIGUOUS_SNAPSHOTS",
+                severity="medium",
+                title="Market history has ambiguous snapshots",
+                explanation="The same bookmaker, market and side was recorded twice at one timestamp with different lines or prices, so movement and fair price are unreliable for that series.",
+                evidence=[f"{a['bookmaker']} {a['market']} {a['side']} at {a['timestamp']}: {a['values']}" for a in ambiguous[:3]],
+            )
+        )
 
     if probability_gap is not None and probability_gap >= 0.05:
         findings.append(
@@ -97,10 +131,8 @@ def build_dual_audit(game: ResearchGame) -> DualAudit:
         )
         questions.append("Which unknown would most change the thesis?")
 
-    moneyline_book_count = len([
-        m for m in game.market
-        if m.market == "moneyline" and m.implied_probability is not None
-    ])
+    # Distinct books with a usable price (not snapshots: two quotes from one book are still one book).
+    moneyline_book_count = len(independent.market_books)
 
     findings.append(
         AuditFinding(
@@ -124,7 +156,8 @@ def build_dual_audit(game: ResearchGame) -> DualAudit:
                 severity="medium",
                 title="Independent layer has thin market coverage",
                 explanation="The control model has fewer than two usable bookmaker moneyline observations.",
-                evidence=[f"Usable moneyline observations: {moneyline_book_count}."],
+                evidence=[f"Usable bookmakers: {moneyline_book_count}.",
+                          *[f"Excluded {b}: {r}" for b, r in independent.market_excluded.items()][:4]],
             )
         )
 

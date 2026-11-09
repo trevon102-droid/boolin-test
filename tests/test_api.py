@@ -26,8 +26,12 @@ def test_research_card_builds_dynamic_flags_and_freshness():
     assert "market_vs_model" in payload
     assert "market_summary" in payload
     assert "freshness" in payload
-    assert any(flag["code"] == "SMALL_SAMPLE" for flag in payload["flags"])
-    assert any(flag["code"] == "AVAILABILITY_UNRESOLVED" for flag in payload["flags"])
+    codes = {flag["code"] for flag in payload["flags"]}
+    # The demo game has sample_size 6 and the small-sample threshold is < 5, so SMALL_SAMPLE must NOT fire here
+    # (it is covered with sample_size=3 in tests/test_engine.py::test_build_flags). This assertion used to expect it
+    # and could never pass against the demo data.
+    assert "SMALL_SAMPLE" not in codes
+    assert "AVAILABILITY_UNRESOLVED" in codes
 
 
 def test_market_summary_and_changes():

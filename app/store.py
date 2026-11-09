@@ -61,7 +61,7 @@ class AnalystStore:
         now = datetime.now(timezone.utc)
         with self._connect() as conn:
             cur = conn.execute(
-                "INSERT INTO notes(game_id,payload,created_at,updated_at) VALUES(?,?,?,?,?)",
+                "INSERT INTO notes(game_id,payload,created_at,updated_at) VALUES(?,?,?,?)",
                 (game_id, note.model_dump_json(), now.isoformat(), now.isoformat()),
             )
             note_id = int(cur.lastrowid)

@@ -35,10 +35,18 @@ class MarketSnapshot(BaseModel):
     line: float | None = None
     price: int | None = None
     implied_probability: float | None = None
+    # Market identity. `side` is the selection (team code for moneyline/spread, over/under for totals).
+    period: str = "full_game"
+    # None = the main line. Set a label (e.g. "alt+6.5") for alternate lines so they never merge with the main line.
+    line_id: str | None = None
 
 
 class ModelView(BaseModel):
     win_probability: float | None = Field(default=None, ge=0, le=1)
+    # Which team `win_probability` and `projected_spread` are FROM: a team code (e.g. "BUF"), or "home"/"away".
+    # projected_spread must use the same convention as market spread lines for that team (BUF +3.5 = 3.5).
+    # Left unset, side-dependent comparisons against the market are skipped with a warning (never guessed).
+    perspective: str | None = None
     projected_spread: float | None = None
     projected_total: float | None = None
     confidence: float | None = Field(default=None, ge=0, le=1)
@@ -117,9 +125,18 @@ class IndependentOpinion(BaseModel):
     engine: str = "independent-v1"
     methodology: str = "Market-consensus baseline with explicit uncertainty penalties; does not reuse Boolin Analyst engine outputs."
     market_probability: float | None = Field(default=None, ge=0, le=1)
+    # The team market_probability is for, and how it was computed:
+    #   "no_vig_consensus"          = mean of per-book no-vig probabilities from complete, synchronized pairs
+    #   "raw_implied_vig_included"  = only one side was quoted, so the book margin could NOT be removed
+    #   "unavailable"
+    market_probability_side: str | None = None
+    market_probability_basis: str = "unavailable"
+    market_books: list[str] = Field(default_factory=list)
+    market_excluded: dict[str, str] = Field(default_factory=dict)
     market_spread: float | None = None
     market_total: float | None = None
     movement_signal: str = "unknown"
+    movement: list[dict] = Field(default_factory=list)
     availability_signal: str = "unknown"
     data_quality: str = "unknown"
     confidence: float = Field(ge=0, le=1)

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from . import matching
 from .models import (
     ChangeEvent,
     DataStatus,
@@ -86,25 +87,25 @@ def build_flags(game: ResearchGame) -> list[ResearchFlag]:
     return flags
 
 
-def market_current(game: ResearchGame, market: str, bookmaker: str | None = None) -> Any | None:
-    candidates = [m for m in game.market if m.market == market]
-    if bookmaker:
-        candidates = [m for m in candidates if m.bookmaker == bookmaker]
-    if not candidates:
-        return None
-    return max(candidates, key=lambda x: x.timestamp)
+def market_current(game: ResearchGame, market: str, bookmaker: str | None = None, side: str | None = None,
+                   period: str = "full_game", line_id: str | None = None) -> Any | None:
+    """Latest main-line quote. Pass `side` for any two-sided market: without it the latest quote of EITHER
+    side is returned, and which side that is depends on input order."""
+    return matching.latest(game, market, side=side, bookmaker=bookmaker, period=period, line_id=line_id)
 
 
 def market_summary(game: ResearchGame, now: datetime | None = None) -> list[dict[str, Any]]:
     now = now or datetime.now(timezone.utc)
-    groups: dict[tuple[str, str, str | None], list[Any]] = {}
+    groups: dict[tuple, list[Any]] = {}
+    ambiguous = {(a["bookmaker"], a["market"], a["side"]) for a in matching.ambiguous_snapshots(game)}
 
     for snapshot in game.market:
-        key = (snapshot.bookmaker, snapshot.market, snapshot.side)
+        # period and line_id are part of the identity: an alternate line is a different series, not a "move".
+        key = (snapshot.bookmaker, snapshot.market, snapshot.side, snapshot.period, snapshot.line_id)
         groups.setdefault(key, []).append(snapshot)
 
     result: list[dict[str, Any]] = []
-    for (bookmaker, market, side), snapshots in groups.items():
+    for (bookmaker, market, side, period, line_id), snapshots in groups.items():
         ordered = sorted(snapshots, key=lambda x: x.timestamp)
         opening = ordered[0]
         current = ordered[-1]
@@ -116,6 +117,9 @@ def market_summary(game: ResearchGame, now: datetime | None = None) -> list[dict
                 "bookmaker": bookmaker,
                 "market": market,
                 "side": side,
+                "period": period,
+                "line_id": line_id,
+                "ambiguous": (bookmaker, market, side) in ambiguous,
                 "opening": opening.model_dump(mode="json"),
                 "current": current.model_dump(mode="json"),
                 "closing": closing.model_dump(mode="json") if closing else None,
@@ -133,7 +137,7 @@ def market_summary(game: ResearchGame, now: datetime | None = None) -> list[dict
             }
         )
 
-    return sorted(result, key=lambda x: (x["market"], x["bookmaker"], x["side"] or ""))
+    return sorted(result, key=lambda x: (x["market"], x["bookmaker"], x["side"] or "", x["period"], x["line_id"] or ""))
 
 
 def freshness(game: ResearchGame, now: datetime | None = None) -> list[dict[str, Any]]:
@@ -160,13 +164,35 @@ def freshness(game: ResearchGame, now: datetime | None = None) -> list[dict[str,
 
 
 def compare_market_model(game: ResearchGame) -> dict[str, Any]:
-    result: dict[str, Any] = {}
+    """Compare the model to the market, side-matched.
 
-    if game.model.win_probability is not None:
-        ml = market_current(game, "moneyline")
-        if ml and ml.implied_probability is not None:
-            delta = game.model.win_probability - ml.implied_probability
-            result["market_win_probability"] = ml.implied_probability
+    The model's win probability and projected spread are FROM `game.model.perspective`; they are only compared
+    to quotes for that same team. If the perspective is unset, the side-dependent comparisons are skipped and a
+    warning is returned (the previous behavior compared against whichever side was quoted last).
+    """
+    result: dict[str, Any] = {}
+    warnings: list[str] = []
+    team = matching.resolve_team(game, game.model.perspective)
+    needs_side = game.model.win_probability is not None or game.model.projected_spread is not None
+    if needs_side and team is None:
+        warnings.append(
+            "MODEL_PERSPECTIVE_UNSPECIFIED: set model.perspective (team code, 'home' or 'away') so the model can be "
+            "compared with the matching side of the market; moneyline and spread comparisons were skipped."
+            if game.model.perspective is None else
+            f"MODEL_PERSPECTIVE_INVALID: '{game.model.perspective}' is not {game.home_team}, {game.away_team}, 'home' or 'away'; "
+            "moneyline and spread comparisons were skipped."
+        )
+
+    if team is not None:
+        result["perspective_team"] = team
+
+    if game.model.win_probability is not None and team is not None:
+        fm = matching.fair_moneyline(game, team)
+        if fm["probability"] is not None:
+            delta = game.model.win_probability - fm["probability"]
+            result["market_win_probability"] = fm["probability"]
+            result["market_probability_basis"] = fm["basis"]
+            result["market_books"] = fm["books"]
             result["model_win_probability"] = game.model.win_probability
             result["probability_delta"] = round(delta, 4)
             if abs(delta) >= 0.05:
@@ -175,19 +201,32 @@ def compare_market_model(game: ResearchGame) -> dict[str, Any]:
                 result["disagreement"] = "mild"
             else:
                 result["disagreement"] = "aligned"
+            if fm["basis"] != "no_vig_consensus":
+                warnings.append("MARKET_PROBABILITY_INCLUDES_VIG: only one side was quoted, so the book margin was not removed.")
+        else:
+            warnings.append(f"NO_COMPARABLE_MONEYLINE: no usable {team} moneyline ({'; '.join(f'{b}: {r}' for b, r in fm['excluded'].items()) or 'none quoted'}).")
+        if fm["basis"] == "no_vig_consensus":
+            for book, reason in fm["excluded"].items():
+                warnings.append(f"EXCLUDED_BOOK {book}: {reason}")
 
-    spread = market_current(game, "spread")
-    if spread and game.model.projected_spread is not None and spread.line is not None:
-        result["market_spread"] = spread.line
-        result["projected_spread"] = game.model.projected_spread
-        result["spread_delta"] = round(game.model.projected_spread - spread.line, 2)
+    if team is not None:
+        spread = matching.market_spread_for(game, team)
+        if spread and game.model.projected_spread is not None and spread.line is not None:
+            result["market_spread"] = spread.line
+            result["projected_spread"] = game.model.projected_spread
+            result["spread_delta"] = round(game.model.projected_spread - spread.line, 2)
 
+    # Totals have no side that matters: both sides carry the same line, so the latest main-line total is valid.
     total = market_current(game, "total")
     if total and game.model.projected_total is not None and total.line is not None:
         result["market_total"] = total.line
         result["projected_total"] = game.model.projected_total
         result["total_delta"] = round(game.model.projected_total - total.line, 2)
 
+    if matching.ambiguous_snapshots(game):
+        warnings.append("MARKET_AMBIGUOUS_SNAPSHOTS: same series quoted twice at one timestamp with different values (unlabelled alternate line?).")
+    if warnings:
+        result["warnings"] = warnings
     return result
 
 
@@ -207,9 +246,9 @@ def detect_changes(previous: ResearchGame, current: ResearchGame) -> list[Change
             )
         )
 
-    prev_market = {(m.bookmaker, m.market, m.side): m for m in previous.market}
+    prev_market = {(m.bookmaker, m.market, m.side, m.period, m.line_id): m for m in previous.market}
     for m in current.market:
-        old = prev_market.get((m.bookmaker, m.market, m.side))
+        old = prev_market.get((m.bookmaker, m.market, m.side, m.period, m.line_id))
         if old and (old.line != m.line or old.price != m.price):
             changes.append(
                 ChangeEvent(
@@ -242,12 +281,12 @@ def detect_changes(previous: ResearchGame, current: ResearchGame) -> list[Change
 
 def detect_internal_market_changes(game: ResearchGame) -> list[ChangeEvent]:
     changes: list[ChangeEvent] = []
-    grouped: dict[tuple[str, str, str | None], list[Any]] = {}
+    grouped: dict[tuple, list[Any]] = {}
 
     for snapshot in game.market:
-        grouped.setdefault((snapshot.bookmaker, snapshot.market, snapshot.side), []).append(snapshot)
+        grouped.setdefault((snapshot.bookmaker, snapshot.market, snapshot.side, snapshot.period, snapshot.line_id), []).append(snapshot)
 
-    for (bookmaker, market, side), snapshots in grouped.items():
+    for (bookmaker, market, side, period, line_id), snapshots in grouped.items():
         ordered = sorted(snapshots, key=lambda x: x.timestamp)
         for old, new in zip(ordered, ordered[1:]):
             if old.line == new.line and old.price == new.price:

@@ -17,7 +17,8 @@
       {"timestamp":"2026-10-05T15:30:00Z","bookmaker":"pinnacle","market":"total","side":"over","line":46.0,"price":-110}
     ],
     "model": {
-      "win_probability": 0.455,
+      "perspective": "BUF",
+    "win_probability": 0.455,
       "projected_spread": 1.7,
       "projected_total": 44.8,
       "confidence": 0.71,

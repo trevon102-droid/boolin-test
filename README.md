@@ -45,6 +45,24 @@ Set `BOOLIN_GAMES_PATH` to point the analyst service at a normalized Boolin game
 
 Set `ANALYST_DB_PATH` to choose where analyst notes and postgame reviews are stored. SQLite is used by default.
 
+## Market matching rules
+
+A market quote is only compared with the model, or with another quote, when the event, market, **side**, period and
+line series all match (`app/matching.py`).
+
+- **Perspective.** `model.perspective` says which team `win_probability` and `projected_spread` are FROM (a team code,
+  `home` or `away`). If it is missing or invalid, moneyline/spread comparisons are skipped with a warning instead of
+  guessing a side. `projected_spread` must use the same sign convention as market spread lines for that team (BUF +3.5 = 3.5).
+- **No-vig fair probability.** Per bookmaker, both sides must be quoted within 15 minutes of each other; the margin is
+  then removed proportionally and the books are averaged. Books with a missing side, stale pair or ambiguous snapshots
+  are excluded with a stated reason. If no book has a complete pair, the response falls back to the raw implied
+  probability and labels it `raw_implied_vig_included`.
+- **Movement** is calculated per bookmaker + market + side + period + line series (`independent.movement_records`), with
+  statuses `STABLE`, `LINE_ONLY_MOVE`, `PRICE_ONLY_MOVE`, `LINE_AND_PRICE_MOVE`, `INSUFFICIENT_HISTORY`, `UNKNOWN`. Steam and
+  reverse-line-movement signals are not computed (they need betting-percentage data).
+- **Alternate lines** must carry a `line_id` (the main line is `null`). Two different lines for the same series at the same
+  timestamp without a `line_id` are flagged `MARKET_AMBIGUOUS_SNAPSHOTS` and excluded from the fair price.
+
 ## Research principles
 
 The API keeps confirmed, projected, and derived information separate. The independent layer does not call the primary research engine; it acts as a market-first control model designed to expose overconfidence and data-quality problems. It computes research flags dynamically so stale demo metadata cannot hide unresolved conditions.

@@ -44,6 +44,7 @@ def game(line: float = 3.5, probability: float = 0.45) -> ResearchGame:
             ),
         ],
         model=ModelView(
+            perspective="BUF",
             win_probability=probability,
             projected_spread=1.5,
             projected_total=44.5,
